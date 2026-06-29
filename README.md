@@ -23,7 +23,7 @@ A pastel-themed full-stack task management app with **free** AI-powered PowerPoi
 3. Click **"Create API Key"** pick or create a project
 4. Copy the key (starts with `AIzaSy...`)
 
-The free tier gives you **10 requests/minute, 1500/day** with `gemini-2.5-flash` โ€” more than enough for this app. No credit card required.
+The free tier gives you **10 requests/minute, 1500/day** with `gemini-2.5-flash` more than enough for this app. No credit card required.
 
 ### 2. Configure and run
 ```bash
