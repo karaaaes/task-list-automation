@@ -1,0 +1,125 @@
+{% extends 'base.html' %}
+{% block title %}Create Task ยท KARA TASK LIST{% endblock %}
+{% block page_title %}Create Task{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  <div class="col-lg-7">
+    <div class="card-soft">
+      <div class="card-title-bar">
+        <h5><i class="bi bi-plus-circle"></i> New Task Details</h5>
+      </div>
+      <form id="taskForm">
+        <div class="mb-3">
+          <label class="form-label-soft">Task Detail <span style="color:var(--cancel);">*</span></label>
+          <input type="text" id="detail" class="input-soft" placeholder="e.g. Prepare weekly report" required maxlength="500">
+          <div class="form-hint">Give your task a clear, descriptive name.</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label-soft">Notes</label>
+          <textarea id="notes" class="input-soft" rows="5" placeholder="Add context, blockers, dependencies, links, or anything else worth remembering..."></textarea>
+          <div class="form-hint">Notes feed into the executive PPT summary โ€” the richer, the better.</div>
+        </div>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label-soft">Date <span style="color:var(--cancel);">*</span></label>
+            <input type="date" id="task_date" class="input-soft" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label-soft">Status</label>
+            <input type="text" id="status" class="input-soft" value="Planned" readonly style="font-weight:700; letter-spacing:1px;">
+            <div class="form-hint">New tasks start as Planned.</div>
+          </div>
+        </div>
+        <div class="d-flex gap-2 mt-4">
+          <button type="button" class="btn-pastel" id="submitBtn"><i class="bi bi-check2"></i> Create Task</button>
+          <a href="/tasks" class="btn-soft"><i class="bi bi-x"></i> Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card-soft">
+      <h5 style="font-weight:700; color:var(--text);"><i class="bi bi-lightbulb" style="color:var(--gold);"></i> Tips for Great Tasks</h5>
+      <ul style="padding-left: 20px; color: var(--text-soft); line-height: 1.9; margin-top: 12px;">
+        <li>Be specific โ€” "Write Q3 report intro" beats "Work on report"</li>
+        <li>Use action verbs at the start</li>
+        <li>Pick a realistic date you can commit to</li>
+        <li>Break large tasks into smaller, completable items</li>
+        <li>Use <strong>Notes</strong> for context the AI needs (people, links, decisions)</li>
+        <li>Review and update status regularly</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- Confirmation Modal -->
+<div class="modal fade" id="confirmModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-patch-question text-primary"></i> Confirm Task Creation</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Please review your new task:</p>
+        <div style="background:var(--bg-2); border:1px solid var(--border); border-radius:10px; padding:16px;">
+          <div class="mb-2"><strong style="color:var(--gold-dim); font-size:11px; text-transform:uppercase; letter-spacing:1.2px;">Detail</strong><br><span id="prevDetail" style="color:var(--text);"></span></div>
+          <div class="mb-2"><strong style="color:var(--gold-dim); font-size:11px; text-transform:uppercase; letter-spacing:1.2px;">Notes</strong><br><span id="prevNotes" style="color:var(--text-soft); white-space:pre-wrap;"></span></div>
+          <div class="mb-2"><strong style="color:var(--gold-dim); font-size:11px; text-transform:uppercase; letter-spacing:1.2px;">Date</strong><br><span id="prevDate" style="color:var(--text);"></span></div>
+          <div><strong style="color:var(--gold-dim); font-size:11px; text-transform:uppercase; letter-spacing:1.2px;">Status</strong><br><span class="badge-status Planned">Planned</span></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-soft" data-bs-dismiss="modal">Go Back</button>
+        <button class="btn-pastel" id="confirmCreateBtn"><i class="bi bi-check2-all"></i> Yes, Create</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let confirmModal;
+document.addEventListener('DOMContentLoaded', () => {
+  confirmModal = new bootstrap.Modal(document.getElementById('confirmModal'));
+
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById('task_date').value = today;
+
+  document.getElementById('submitBtn').addEventListener('click', () => {
+    const detail = document.getElementById('detail').value.trim();
+    const notes = document.getElementById('notes').value;
+    const date = document.getElementById('task_date').value;
+    if (!detail) { showToast('Please enter task detail', 'error'); return; }
+    if (!date)   { showToast('Please pick a date', 'error'); return; }
+    document.getElementById('prevDetail').textContent = detail;
+    document.getElementById('prevNotes').textContent = notes || 'โ€” no notes โ€”';
+    document.getElementById('prevDate').textContent = fmtDate(date);
+    confirmModal.show();
+  });
+
+  document.getElementById('confirmCreateBtn').addEventListener('click', async () => {
+    const payload = {
+      detail: document.getElementById('detail').value.trim(),
+      notes: document.getElementById('notes').value,
+      task_date: document.getElementById('task_date').value,
+      status: 'Planned',
+    };
+    try {
+      const r = await fetch('/api/tasks', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+      });
+      if (!r.ok) throw new Error();
+      confirmModal.hide();
+      showToast('Task created', 'success');
+      setTimeout(() => window.location.href = '/tasks', 700);
+    } catch (e) {
+      showToast('Failed to create task', 'error');
+    }
+  });
+});
+</script>
+{% endblock %}

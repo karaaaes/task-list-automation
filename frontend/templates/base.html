@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}KARA TASK LIST{% endblock %}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.css" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-logo">
+          <i class="bi bi-hexagon-fill"></i>
+        </div>
+        <div class="brand-text">
+          <div class="brand-title">KARA</div>
+          <div class="brand-sub">Task List</div>
+        </div>
+      </div>
+
+      <nav class="nav-menu">
+        <a href="/" class="nav-item {% if active=='home' %}active{% endif %}">
+          <i class="bi bi-house"></i><span>Home</span>
+        </a>
+
+        <div class="nav-group">
+          <div class="nav-group-title"><i class="bi bi-list-check"></i><span>Task</span></div>
+          <a href="/tasks" class="nav-sub {% if active=='list_task' %}active{% endif %}">
+            <i class="bi bi-card-list"></i><span>List Task</span>
+          </a>
+          <a href="/tasks/create" class="nav-sub {% if active=='create_task' %}active{% endif %}">
+            <i class="bi bi-plus-circle"></i><span>Create Task</span>
+          </a>
+          <a href="/tasks/generate-ppt" class="nav-sub {% if active=='generate_ppt' %}active{% endif %}">
+            <i class="bi bi-file-earmark-slides"></i><span>Generate PPT</span>
+          </a>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="footer-card">
+          <div style="font-size: 18px; color: var(--gold);"><i class="bi bi-stars"></i></div>
+          <div class="footer-text">Stay organized, ship cleanly.</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+      <header class="topbar">
+        <button class="btn-icon d-md-none" id="toggleSidebar"><i class="bi bi-list"></i></button>
+        <div class="topbar-title">{% block page_title %}{% endblock %}</div>
+        <div class="topbar-right">
+          <div class="user-chip">
+            <div class="user-avatar">K</div>
+            <div class="user-name">Kara</div>
+          </div>
+        </div>
+      </header>
+
+      <section class="content">
+        {% block content %}{% endblock %}
+      </section>
+    </main>
+  </div>
+
+  <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 2000;" id="toastBox"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

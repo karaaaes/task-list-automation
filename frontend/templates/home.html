@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+{% block title %}Home ยท KARA TASK LIST{% endblock %}
+{% block page_title %}Home{% endblock %}
+
+{% block content %}
+<div class="hero">
+  <div class="hero-shape"></div>
+  <div class="hero-shape two"></div>
+  <h1>Welcome back, Kara</h1>
+  <p>Here's an overview of your tasks for the past 30 days.</p>
+</div>
+
+<div class="row g-3 mb-4" id="statsRow">
+  <div class="col-md-3 col-6">
+    <div class="stat-card gold">
+      <div class="stat-icon"><i class="bi bi-collection"></i></div>
+      <div class="stat-label">Total Tasks</div>
+      <div class="stat-value" id="statTotal">0</div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="stat-card planned">
+      <div class="stat-icon"><i class="bi bi-calendar2-check"></i></div>
+      <div class="stat-label">Planned</div>
+      <div class="stat-value" id="statPlanned">0</div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="stat-card done">
+      <div class="stat-icon"><i class="bi bi-check2-circle"></i></div>
+      <div class="stat-label">Completed</div>
+      <div class="stat-value" id="statCompleted">0</div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="stat-card cancel">
+      <div class="stat-icon"><i class="bi bi-x-octagon"></i></div>
+      <div class="stat-label">Cancelled</div>
+      <div class="stat-value" id="statCancelled">0</div>
+    </div>
+  </div>
+</div>
+
+<div class="card-soft">
+  <div class="card-title-bar">
+    <h5><i class="bi bi-graph-up-arrow"></i> Task Creation โ€” Last 30 Days</h5>
+    <span style="font-size:11px; color:var(--muted); letter-spacing:1px; text-transform:uppercase;">Daily count</span>
+  </div>
+  <canvas id="trendChart" height="90"></canvas>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadDashboard() {
+  try {
+    const res = await fetch('/api/dashboard/summary');
+    const data = await res.json();
+    document.getElementById('statTotal').textContent = data.total;
+    document.getElementById('statPlanned').textContent = data.by_status.Planned;
+    document.getElementById('statCompleted').textContent = data.by_status.Completed;
+    document.getElementById('statCancelled').textContent = data.by_status.Cancelled;
+
+    const labels = data.chart.map(d => {
+      const dt = new Date(d.date);
+      return dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+    });
+    const counts = data.chart.map(d => d.count);
+
+    const ctx = document.getElementById('trendChart').getContext('2d');
+    const grad = ctx.createLinearGradient(0, 0, 0, 300);
+    grad.addColorStop(0, 'rgba(212, 179, 112, 0.35)');
+    grad.addColorStop(1, 'rgba(212, 179, 112, 0.02)');
+
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Tasks created',
+          data: counts,
+          borderColor: '#D4B370',
+          backgroundColor: grad,
+          fill: true,
+          tension: 0.35,
+          pointBackgroundColor: '#1F1A15',
+          pointBorderColor: '#D4B370',
+          pointBorderWidth: 2,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#2A2219',
+            titleColor: '#F1E8D9',
+            bodyColor: '#C8BBA6',
+            borderColor: '#4A3D2E',
+            borderWidth: 1,
+            padding: 12,
+            cornerRadius: 8,
+          }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: '#8A7B65', font: { size: 11 } } },
+          y: {
+            beginAtZero: true,
+            ticks: { color: '#8A7B65', precision: 0 },
+            grid: { color: '#2A2219' }
+          }
+        }
+      }
+    });
+  } catch (e) {
+    showToast('Failed to load dashboard', 'error');
+  }
+}
+loadDashboard();
+</script>
+{% endblock %}
