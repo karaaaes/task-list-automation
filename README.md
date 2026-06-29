@@ -10,17 +10,17 @@ A pastel-themed full-stack task management app with **free** AI-powered PowerPoi
 - **Container:** Docker + Docker Compose
 
 ## Features
-- **Home** โ€” total tasks, status breakdown, 30-day creation trend chart
-- **List Task** โ€” paginated table (10/page), live search by title & date, sort by created/modified/status, inline status update, edit modal, delete confirmation
-- **Create Task** โ€” form with confirmation modal, auto status = Planned
-- **Generate PPT** โ€” pick date range + status, Gemini analyzes tasks and produces a designed pastel PowerPoint, downloaded instantly
+- **Home** total tasks, status breakdown, 30-day creation trend chart
+- **List Task** paginated table (10/page), live search by title & date, sort by created/modified/status, inline status update, edit modal, delete confirmation
+- **Create Task** form with confirmation modal, auto status = Planned
+- **Generate PPT** pick date range + status, Gemini analyzes tasks and produces a designed pastel PowerPoint, downloaded instantly
 
 ## Setup
 
 ### 1. Get a free Gemini API key
 1. Go to <https://aistudio.google.com/app/apikey>
 2. Sign in with any Google account
-3. Click **"Create API Key"** โ†’ pick or create a project
+3. Click **"Create API Key"** pick or create a project
 4. Copy the key (starts with `AIzaSy...`)
 
 The free tier gives you **10 requests/minute, 1500/day** with `gemini-2.5-flash` โ€” more than enough for this app. No credit card required.
@@ -37,7 +37,7 @@ docker compose up -d --build
 - Frontend (UI): <http://localhost:8889>
 - Backend health: <http://localhost:8888/api/health>
 
-## Database access (Beekeeper / psql)
+## Database access (Beekeeper / PgAdmin)
 
 | Field    | Value           |
 |----------|-----------------|
