@@ -13,6 +13,9 @@ from pptx.util import Inches, Pt, Emu
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import PP_ALIGN
 from pptx.dml.color import RGBColor
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
 app = Flask(__name__)
 CORS(app)
@@ -298,7 +301,7 @@ def add_section_header(slide, title_text, subtitle_text=''):
 
 
 def build_ppt(plan, tasks, date_from, date_to, status_filter):
-    """Build a professional dark-brown themed PPT."""
+    """Build a professional dark-brown themed PPT (category-based, no task list)."""
     prs = Presentation()
     prs.slide_width = Inches(13.333)
     prs.slide_height = Inches(7.5)
@@ -307,7 +310,7 @@ def build_ppt(plan, tasks, date_from, date_to, status_filter):
     title = plan.get('title', 'Task Report')
     subtitle = plan.get('subtitle', '')
     summary = plan.get('summary', '')
-    highlights = plan.get('highlights', []) or []
+    categories = plan.get('categories', []) or []
     recommendations = plan.get('recommendations', []) or []
 
     # =========================================================
@@ -316,28 +319,22 @@ def build_ppt(plan, tasks, date_from, date_to, status_filter):
     s = prs.slides.add_slide(blank)
     set_slide_bg(s, BROWN['bg'])
 
-    # left dark band
     add_rect(s, Inches(0), Inches(0), Inches(4.5), Inches(7.5), BROWN['espresso'])
-    # gold vertical accent
     add_rect(s, Inches(4.5), Inches(0), Inches(0.08), Inches(7.5), BROWN['gold'])
 
-    # brand block on dark side
     add_rect(s, Inches(0.6), Inches(0.7), Inches(0.4), Inches(0.05), BROWN['gold'])
     add_text(s, Inches(0.6), Inches(0.85), Inches(3.5), Inches(0.4),
              'KARA TASK LIST', size=12, bold=True, color=BROWN['gold'])
     add_text(s, Inches(0.6), Inches(1.2), Inches(3.5), Inches(0.4),
              'Executive Report', size=10, color=BROWN['gold_soft'], italic=True)
 
-    # bottom info on dark
     add_text(s, Inches(0.6), Inches(6.4), Inches(3.5), Inches(0.3),
              'PERIOD', size=9, bold=True, color=BROWN['gold'])
     add_text(s, Inches(0.6), Inches(6.7), Inches(3.5), Inches(0.4),
-             f'{date_from}  โ€”  {date_to}', size=12, color=BROWN['bg'])
+             f'{date_from}  \u2014  {date_to}', size=12, color=BROWN['bg'])
 
-    # title on right (light) side
     add_text(s, Inches(5.2), Inches(2.6), Inches(7.8), Inches(0.4),
              'TASK PERFORMANCE REPORT', size=11, bold=True, color=BROWN['copper'])
-    # thin gold divider above title
     add_rect(s, Inches(5.2), Inches(3.05), Inches(0.8), Inches(0.04), BROWN['gold'])
     add_text(s, Inches(5.2), Inches(3.2), Inches(7.8), Inches(1.6),
              title, size=40, bold=True, color=BROWN['espresso'])
@@ -358,7 +355,6 @@ def build_ppt(plan, tasks, date_from, date_to, status_filter):
     set_slide_bg(s, BROWN['bg'])
     add_section_header(s, 'Executive Summary', 'Period-over-period performance at a glance')
 
-    # KPI strip - 4 cards in single row
     total = len(tasks)
     by_status = {st: 0 for st in STATUS_ORDER}
     for t in tasks:
@@ -377,7 +373,6 @@ def build_ppt(plan, tasks, date_from, date_to, status_filter):
     start_x = Inches(0.6)
     for i, (label, val) in enumerate(kpis):
         left = start_x + (card_w + gap) * i
-        # dark card with gold top stripe
         add_rect(s, left, Inches(2.0), card_w, card_h, BROWN['card'])
         add_rect(s, left, Inches(2.0), card_w, Inches(0.06), BROWN['gold'])
         add_text(s, left + Inches(0.3), Inches(2.2), card_w - Inches(0.6), Inches(0.35),
@@ -385,7 +380,6 @@ def build_ppt(plan, tasks, date_from, date_to, status_filter):
         add_text(s, left + Inches(0.3), Inches(2.55), card_w - Inches(0.6), Inches(0.85),
                  val, size=36, bold=True, color=BROWN['espresso'])
 
-    # Summary panel
     add_rect(s, Inches(0.6), Inches(3.7), Inches(12.1), Inches(2.95), BROWN['card'])
     add_rect(s, Inches(0.6), Inches(3.7), Inches(0.08), Inches(2.95), BROWN['copper'])
     add_text(s, Inches(0.9), Inches(3.9), Inches(11.5), Inches(0.4),
@@ -394,87 +388,88 @@ def build_ppt(plan, tasks, date_from, date_to, status_filter):
              summary or 'No summary available.', size=13, color=BROWN['espresso'])
 
     # =========================================================
-    # SLIDE 3+: TASK LIST (paginated, 10 per slide)
+    # SLIDE 3+: CATEGORY INSIGHTS (dynamic height, space-based pagination)
     # =========================================================
-    chunk = 10
-    total_pages = max(1, (len(tasks) + chunk - 1) // chunk)
-    for page_i in range(0, max(len(tasks), 1), chunk):
-        s = prs.slides.add_slide(blank)
-        set_slide_bg(s, BROWN['bg'])
-        current_page = page_i // chunk + 1
-        subtitle_str = f'Page {current_page} of {total_pages}  ยท  Showing {page_i+1}-{min(page_i+chunk, len(tasks))} of {len(tasks)}'
-        add_section_header(s, 'Task List', subtitle_str)
+    if categories:
+        # ---- layout constants ----
+        FONT_SIZE = 10                 # insight body font (pt)
+        CARD_W = Inches(12.1)
+        CARD_X = Inches(0.6)
+        CONTENT_TOP = Inches(2.0)      # first card starts here
+        CONTENT_BOTTOM = Inches(6.9)   # cards must not pass this (footer at 7.05)
+        GAP_Y = Inches(0.2)
+        HEADER_H = Inches(0.8)         # name + badge + divider zone
+        BODY_PAD_BOTTOM = Inches(0.2)
+        # approx text metrics for a ~11.6" wide box at 10pt
+        CHARS_PER_LINE = 150
+        LINE_H = Inches(0.19)          # height per wrapped line at 10pt
 
-        # Table header row
-        header_y = Inches(1.95)
-        add_rect(s, Inches(0.6), header_y, Inches(12.1), Inches(0.45), BROWN['espresso'])
-        add_text(s, Inches(0.75), header_y + Inches(0.1), Inches(0.5), Inches(0.3),
-                 '#', size=10, bold=True, color=BROWN['gold'])
-        add_text(s, Inches(1.3), header_y + Inches(0.1), Inches(5.0), Inches(0.3),
-                 'TASK DETAIL', size=10, bold=True, color=BROWN['gold'])
-        add_text(s, Inches(6.4), header_y + Inches(0.1), Inches(3.5), Inches(0.3),
-                 'NOTES', size=10, bold=True, color=BROWN['gold'])
-        add_text(s, Inches(10.0), header_y + Inches(0.1), Inches(1.3), Inches(0.3),
-                 'DATE', size=10, bold=True, color=BROWN['gold'])
-        add_text(s, Inches(11.4), header_y + Inches(0.1), Inches(1.3), Inches(0.3),
-                 'STATUS', size=10, bold=True, color=BROWN['gold'], align=PP_ALIGN.CENTER)
+        def wrapped_line_count(insight_text):
+            n_lines = 0
+            for raw_line in insight_text.split('\n'):
+                if not raw_line.strip():
+                    n_lines += 1
+                    continue
+                n_lines += max(1, -(-len(raw_line) // CHARS_PER_LINE))  # ceil div
+            return max(1, n_lines)
 
-        row_y = header_y + Inches(0.45)
-        row_h = Inches(0.42)
-        page_tasks = tasks[page_i:page_i+chunk]
-        for ridx, t in enumerate(page_tasks):
-            row_bg = BROWN['card'] if ridx % 2 == 0 else BROWN['card_alt']
-            add_rect(s, Inches(0.6), row_y, Inches(12.1), row_h, row_bg)
+        def card_height_for(insight_text):
+            body_h = LINE_H * wrapped_line_count(insight_text)
+            return HEADER_H + body_h + BODY_PAD_BOTTOM
 
-            add_text(s, Inches(0.75), row_y + Inches(0.1), Inches(0.5), Inches(0.3),
-                     str(page_i + ridx + 1), size=10, bold=True, color=BROWN['mocha'])
+        # ---- greedy pack categories into pages by available vertical space ----
+        pages = []
+        current = []
+        y = CONTENT_TOP
+        for cat in categories:
+            insight = cat.get('insight', '') or 'No insight available.'
+            ch = card_height_for(insight)
+            if current and (y + ch > CONTENT_BOTTOM):
+                pages.append(current)
+                current = []
+                y = CONTENT_TOP
+            current.append((cat, ch))
+            y += ch + GAP_Y
+        if current:
+            pages.append(current)
 
-            detail = t['detail']
-            if len(detail) > 50:
-                detail = detail[:47] + '...'
-            add_text(s, Inches(1.3), row_y + Inches(0.1), Inches(5.0), Inches(0.3),
-                     detail, size=10, color=BROWN['espresso'])
+        total_pages = len(pages)
+        total_cats = len(categories)
 
-            note_preview = (t.get('notes') or '').replace('\n', ' ').strip()
-            if not note_preview:
-                note_preview = 'โ€”'
-                note_color = BROWN['muted']
+        for pidx, page in enumerate(pages):
+            s = prs.slides.add_slide(blank)
+            set_slide_bg(s, BROWN['bg'])
+            if total_pages > 1:
+                subtitle_str = f'Page {pidx + 1} of {total_pages}  \u00b7  {total_cats} categories total'
             else:
-                if len(note_preview) > 38:
-                    note_preview = note_preview[:35] + '...'
-                note_color = BROWN['mocha']
-            add_text(s, Inches(6.4), row_y + Inches(0.1), Inches(3.5), Inches(0.3),
-                     note_preview, size=9, color=note_color, italic=True)
+                subtitle_str = f'{total_cats} categor{"ies" if total_cats != 1 else "y"} in this period'
+            add_section_header(s, 'Category Insights', subtitle_str)
 
-            add_text(s, Inches(10.0), row_y + Inches(0.1), Inches(1.3), Inches(0.3),
-                     t.get('task_date') or '-', size=10, color=BROWN['mocha'])
+            top = CONTENT_TOP
+            for cat, ch in page:
+                left = CARD_X
+                cat_name = cat.get('name', 'Untitled')
+                n = cat.get('task_count', 0)
+                insight = cat.get('insight', '') or 'No insight available.'
 
-            st = t['status']
-            badge_colors = STATUS_BADGE.get(st, STATUS_BADGE['Planned'])
-            add_rounded(s, Inches(11.45), row_y + Inches(0.08), Inches(1.2), Inches(0.26), badge_colors['bg'])
-            add_text(s, Inches(11.45), row_y + Inches(0.1), Inches(1.2), Inches(0.24),
-                     st.upper(), size=8, bold=True, color=badge_colors['fg'], align=PP_ALIGN.CENTER)
+                add_rect(s, left, top, CARD_W, ch, BROWN['card'])
+                add_rect(s, left, top, Inches(0.06), ch, BROWN['copper'])
+                add_text(s, left + Inches(0.25), top + Inches(0.15),
+                         CARD_W - Inches(1.6), Inches(0.4),
+                         cat_name, size=15, bold=True, color=BROWN['espresso'])
+                badge_w = Inches(1.15)
+                badge_left = left + CARD_W - badge_w - Inches(0.2)
+                add_rounded(s, badge_left, top + Inches(0.2), badge_w, Inches(0.32), BROWN['espresso'])
+                add_text(s, badge_left, top + Inches(0.22), badge_w, Inches(0.28),
+                         f'{n} TASK{"S" if n != 1 else ""}',
+                         size=9, bold=True, color=BROWN['gold'], align=PP_ALIGN.CENTER)
+                add_rect(s, left + Inches(0.25), top + Inches(0.65),
+                         CARD_W - Inches(0.5), Inches(0.02), BROWN['gold'])
+                add_text(s, left + Inches(0.25), top + HEADER_H,
+                         CARD_W - Inches(0.5), ch - HEADER_H - BODY_PAD_BOTTOM,
+                         insight, size=FONT_SIZE, color=BROWN['espresso'])
 
-            row_y += row_h
-
-    # =========================================================
-    # SLIDE: HIGHLIGHTS (after Task List)
-    # =========================================================
-    if highlights:
-        s = prs.slides.add_slide(blank)
-        set_slide_bg(s, BROWN['bg'])
-        add_section_header(s, 'Notable Highlights', 'Tasks of particular significance during this period')
-
-        y = Inches(2.0)
-        for i, h in enumerate(highlights[:6]):
-            add_rect(s, Inches(0.6), y, Inches(12.1), Inches(0.7), BROWN['card'])
-            # gold number badge
-            add_rect(s, Inches(0.6), y, Inches(0.08), Inches(0.7), BROWN['gold'])
-            add_text(s, Inches(0.85), y + Inches(0.18), Inches(0.5), Inches(0.4),
-                     f'{i+1:02d}', size=14, bold=True, color=BROWN['copper'])
-            add_text(s, Inches(1.5), y + Inches(0.2), Inches(11.0), Inches(0.4),
-                     h, size=12, color=BROWN['espresso'])
-            y += Inches(0.82)
+                top = top + ch + GAP_Y
 
     # =========================================================
     # SLIDE: RECOMMENDATIONS
@@ -484,7 +479,6 @@ def build_ppt(plan, tasks, date_from, date_to, status_filter):
         set_slide_bg(s, BROWN['bg'])
         add_section_header(s, 'Recommendations', 'Actionable next steps for the upcoming period')
 
-        # 2-column layout
         cols = 2
         card_w2 = Inches(5.95)
         card_h2 = Inches(1.3)
@@ -507,14 +501,13 @@ def build_ppt(plan, tasks, date_from, date_to, status_filter):
     # =========================================================
     s = prs.slides.add_slide(blank)
     set_slide_bg(s, BROWN['espresso'])
-    # gold horizontal accent
     add_rect(s, Inches(6.0), Inches(3.0), Inches(1.3), Inches(0.06), BROWN['gold'])
     add_text(s, Inches(1), Inches(3.2), Inches(11.3), Inches(1.0),
              'Thank You', size=54, bold=True, color=BROWN['bg'], align=PP_ALIGN.CENTER)
     add_text(s, Inches(1), Inches(4.2), Inches(11.3), Inches(0.5),
              'Questions & Discussion', size=16, color=BROWN['gold_soft'], italic=True, align=PP_ALIGN.CENTER)
     add_text(s, Inches(1), Inches(6.8), Inches(11.3), Inches(0.4),
-             'KARA TASK LIST  ยท  Generated for executive review', size=9, color=BROWN['umber'], align=PP_ALIGN.CENTER)
+             'KARA TASK LIST  \u00b7  Generated for executive review', size=9, color=BROWN['umber'], align=PP_ALIGN.CENTER)
 
     buf = io.BytesIO()
     prs.save(buf)
@@ -522,85 +515,155 @@ def build_ppt(plan, tasks, date_from, date_to, status_filter):
     return buf
 
 
-# ============================================================
-#                    GEMINI PLAN CALL
-# ============================================================
 def call_gemini_for_plan(tasks, date_from, date_to, status_filter):
-    """Ask Gemini to produce a professional, executive-grade content plan."""
+    """Ask Gemini to produce an executive briefing grouped by category (no task list)."""
+
+    # --- Group tasks by category (text before " - " in detail) ---
+    def extract_category(detail):
+        if ' - ' in detail:
+            return detail.split(' - ', 1)[0].strip()
+        return 'Uncategorized'
+
+    def build_detailed_insight(items):
+        lines = [f"{len(items)} task(s) in this category:"]
+        for t in items:
+            line = f"• [{t['status']}] {t['detail']}"
+            n = (t.get('notes') or '').strip()
+            if n:
+                n_short = n.replace('\n', ' ')
+                if len(n_short) > 180:
+                    n_short = n_short[:180] + '...'
+                line += f" — {n_short}"
+            lines.append(line)
+        return "\n".join(lines)
+    
+    grouped = {}
+    for t in tasks:
+        cat = extract_category(t['detail'])
+        grouped.setdefault(cat, []).append(t)
+
+    # --- Fallback if no Gemini API key ---
     if not GEMINI_API_KEY:
         return {
             'title': 'Task Performance Report',
             'subtitle': f'Period {date_from} to {date_to}',
-            'summary': f'This report covers {len(tasks)} task(s) for the selected period.',
-            'highlights': [t['detail'] for t in tasks[:5]],
+            'summary': f'This report covers {len(tasks)} task(s) across {len(grouped)} categories for the selected period.',
+            'categories': [
+                {
+                    'name': cat,
+                    'task_count': len(items),
+                    'insight': f'{len(items)} task(s) recorded under {cat}.',
+                }
+                for cat, items in grouped.items()
+            ],
             'recommendations': [
                 'Review pending Planned tasks.',
                 'Capture lessons learned from Completed items.',
             ],
         }
 
-    task_lines = []
-    for t in tasks:
-        line = f"- [{t['status']}] {t['task_date']}: {t['detail']}"
-        n = (t.get('notes') or '').strip()
-        if n:
-            n_short = n.replace('\n', ' ')
-            if len(n_short) > 200:
-                n_short = n_short[:200] + '...'
-            line += f"  | notes: {n_short}"
-        task_lines.append(line)
-    tasks_text = "\n".join(task_lines) if task_lines else "(no tasks)"
+    # --- Build prompt content: tasks organized per category (context for reasoning only) ---
+    category_blocks = []
+    for cat, items in grouped.items():
+        block_lines = [f"CATEGORY: {cat} ({len(items)} task(s))"]
+        for t in items:
+            line = f"  - [{t['status']}] {t['task_date']}: {t['detail']}"
+            n = (t.get('notes') or '').strip()
+            if n:
+                n_short = n.replace('\n', ' ').replace('"', "'")
+                if len(n_short) > 300:
+                    n_short = n_short[:300] + '...'
+                line += f"\n    context: {n_short}"
+            block_lines.append(line)
+        category_blocks.append("\n".join(block_lines))
+    tasks_text = "\n\n".join(category_blocks) if category_blocks else "(no tasks)"
+
     status_text = status_filter if status_filter else 'All'
+    category_names = list(grouped.keys())
 
     system_prompt = (
         "You are a senior management consultant preparing a board-level executive briefing. "
         "Your tone is formal, precise, and outcome-oriented. You synthesize task data into "
         "insights a busy executive can scan in seconds. You never use emojis, exclamation "
-        "marks, or casual language. Reply with valid JSON only."
+        "marks, or casual language. You group work by category to reveal thematic patterns. "
+        "Reply with a single valid JSON object and nothing else."
     )
 
-    user_prompt = f"""Produce an executive briefing plan for the following task portfolio.
+    user_prompt = f"""Produce an executive briefing plan for the following task portfolio, organized by CATEGORY.
 
 PERIOD: {date_from} to {date_to}
 STATUS FILTER: {status_text}
-TASK COUNT: {len(tasks)}
+TOTAL TASK COUNT: {len(tasks)}
+CATEGORIES ({len(category_names)}): {', '.join(category_names)}
 
-TASKS (each line may include contextual notes after the pipe):
+TASK PORTFOLIO (grouped by category; each task may include a `context:` line for your reasoning only):
 {tasks_text}
 
-Return a JSON object with EXACTLY these keys:
+Return ONE JSON object with EXACTLY this schema (no extra keys, no comments, no trailing commas):
 {{
   "title": "string",
   "subtitle": "string",
   "summary": "string",
-  "highlights": ["string", "string", ...],
+  "categories": [
+    {{
+      "name": "string",
+      "task_count": number,
+      "insight": "string"
+    }}
+  ],
   "recommendations": ["string", "string", ...]
 }}
 
-Guidelines:
-- title: concise, professional, max 7 words. Examples: "Q2 Operations Review", "Strategic Task Portfolio Update". Avoid hype.
-- subtitle: one-line context describing the scope and posture, max 14 words.
-- summary: 4-6 sentences. Open with the headline finding. Cover completion posture, themes from task notes, any risks or blockers visible in the data, and forward outlook. Reference real counts. Formal third-person tone.
-- highlights: 3-5 specific tasks worth surfacing to leadership. Rewrite each as a crisp one-line insight (not a verbatim copy). Lead with the outcome or impact. Use the notes to add substance where available. Max 20 words each.
-- recommendations: 3-5 actionable next steps grounded in the data. Each should be specific enough to assign to an owner. Max 18 words each.
+FIELD GUIDELINES:
 
-Critical rules:
-- No emojis, no markdown, no code fences.
-- No filler words like "delve", "leverage", "synergy".
-- Output raw JSON only.
+- title: concise, professional, max 7 words. Avoid hype.
+- subtitle: one-line scope descriptor, max 14 words.
+- summary: 5-7 sentences. Open with the headline finding across the portfolio. Then describe the thematic pattern PER CATEGORY (which category dominates activity, which is stalled, which shows progress). Reference real counts and category names. End with the forward outlook. Formal third-person tone.
+- categories: one object per category present in the input, in the same order as the CATEGORIES list above.
+    * name: EXACT category name from input (do not rename, do not merge, do not split).
+    * task_count: integer count from input.
+    * insight: describe the category's overall posture in 1 sentence, THEN provide a per-task breakdown. For EACH task write one line beginning with "• [STATUS] " followed by a short description of the task and, where relevant, any risk/blocker or progress inferred from its notes. Use "\n" to separate lines. Reference the actual task detail.
+- recommendations: 3-5 actionable next steps grounded in the data, ideally tied to specific categories. Max 18 words each.
+
+CRITICAL RULES:
+- Output ONE valid JSON object. No markdown fences, no prose before or after.
+- Per-task detail SHOULD appear inside each category's "insight" field, one line per task.
+- Do NOT include a separate "tasks" array. Keep all task detail inside "insight".
+- You MAY use notes/context to enrich the per-task description.
+- Escape any double quotes inside string values as \\".
+- No emojis except the "•" bullet, no filler words.
 """
 
+    def _parse_json_lenient(raw: str):
+        """Try to extract a JSON object from Gemini's output even if slightly malformed."""
+        s = raw.strip()
+        # strip code fences if present
+        s = re.sub(r'^```(?:json)?\s*', '', s)
+        s = re.sub(r'\s*```$', '', s)
+        # first attempt: direct
+        try:
+            return json.loads(s)
+        except json.JSONDecodeError:
+            pass
+        # second attempt: extract substring from first { to last }
+        start = s.find('{')
+        end = s.rfind('}')
+        if start != -1 and end != -1 and end > start:
+            candidate = s[start:end + 1]
+            # remove trailing commas before } or ]
+            candidate = re.sub(r',(\s*[}\]])', r'\1', candidate)
+            try:
+                return json.loads(candidate)
+            except json.JSONDecodeError:
+                pass
+        raise ValueError("Could not parse JSON from Gemini response")
+
     try:
-        gen_config = {
-            "temperature": 0.5,
-            "max_output_tokens": 8192,
-            "response_mime_type": "application/json",
-        }
         try:
             from google.generativeai.types import GenerationConfig
             gen_config_obj = GenerationConfig(
-                temperature=0.5,
-                max_output_tokens=8192,
+                temperature=0.4,
+                max_output_tokens=4096,
                 response_mime_type="application/json",
                 thinking_config={"thinking_budget": 0},
             )
@@ -610,6 +673,11 @@ Critical rules:
                 generation_config=gen_config_obj,
             )
         except (TypeError, ImportError):
+            gen_config = {
+                "temperature": 0.4,
+                "max_output_tokens": 4096,
+                "response_mime_type": "application/json",
+            }
             model = genai.GenerativeModel(
                 model_name=GEMINI_MODEL,
                 system_instruction=system_prompt,
@@ -617,16 +685,47 @@ Critical rules:
             )
 
         resp = model.generate_content(user_prompt)
-        text = (resp.text or '').strip()
-        text = re.sub(r'^```(?:json)?\s*|\s*```$', '', text, flags=re.MULTILINE)
-        return json.loads(text)
+        raw_text = (resp.text or '').strip()
+        result = _parse_json_lenient(raw_text)
+
+        # --- Safety net: enforce category names + counts from source of truth ---
+        source_categories = [
+            {'name': cat, 'task_count': len(items)}
+            for cat, items in grouped.items()
+        ]
+        gemini_insights = {
+            c.get('name'): c.get('insight', '')
+            for c in result.get('categories', [])
+            if isinstance(c, dict)
+        }
+        result['categories'] = [
+            {
+                'name': cat,
+                'task_count': len(items),
+                'insight': gemini_insights.get(cat) or build_detailed_insight(items),
+            }
+            for cat, items in grouped.items()
+        ]
+        # strip any stray "tasks" key if Gemini added it against instructions
+        for c in result['categories']:
+            c.pop('tasks', None)
+
+        return result
+
     except Exception as e:
         print(f"[Gemini error] {e}")
         return {
             'title': 'Task Performance Report',
             'subtitle': f'Period {date_from} to {date_to}',
-            'summary': f'This report covers {len(tasks)} task(s). (AI generation unavailable: {e})',
-            'highlights': [t['detail'] for t in tasks[:5]],
+            'summary': f'This report covers {len(tasks)} task(s) across {len(grouped)} categories. (AI generation unavailable: {e})',
+            'categories': [
+                {
+                    'name': cat,
+                    'task_count': len(items),
+                    'insight': f'{len(items)} task(s) recorded under {cat}.',
+                }
+                for cat, items in grouped.items()
+            ],
             'recommendations': ['Review the task list manually.'],
         }
 
@@ -663,6 +762,178 @@ def generate_ppt():
         as_attachment=True,
         download_name=filename,
         mimetype='application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    )
+
+
+# ============================================================
+#                    EXCEL EXPORT
+# ============================================================
+def build_excel(tasks, date_from, date_to, status_filter):
+    """Build an .xlsx workbook: Tasks sheet (detail rows) + Summary sheet."""
+    wb = Workbook()
+
+    # ---- palette (matches the brown theme, hex without leading #) ----
+    HEADER_BG = "4A2C20"   # coffee
+    HEADER_FG = "F5EEE2"   # ivory
+    TITLE_FG = "2B1810"    # espresso
+    ACCENT = "C9A961"      # gold
+    ZEBRA = "F5EEE2"       # light row tint
+    STATUS_FILL = {
+        "Planned":   "E3CC95",
+        "Completed": "6B4423",
+        "Cancelled": "C5B09A",
+    }
+    STATUS_FONT = {
+        "Planned":   "4A2C20",
+        "Completed": "F5EEE2",
+        "Cancelled": "4A2C20",
+    }
+
+    thin = Side(style="thin", color="D8CBB6")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    # ================= SHEET 1: TASKS =================
+    ws = wb.active
+    ws.title = "Tasks"
+
+    # report meta block
+    ws["A1"] = "KARA TASK LIST — Task Export"
+    ws["A1"].font = Font(name="Calibri", size=15, bold=True, color=TITLE_FG)
+    ws["A2"] = f"Period: {date_from} to {date_to}"
+    ws["A2"].font = Font(name="Calibri", size=10, color="6B4423")
+    ws["A3"] = f"Status filter: {status_filter if status_filter else 'All'}"
+    ws["A3"].font = Font(name="Calibri", size=10, color="6B4423")
+    ws["A4"] = f"Generated: {date.today().isoformat()}   |   Total: {len(tasks)} task(s)"
+    ws["A4"].font = Font(name="Calibri", size=10, color="6B4423")
+
+    header_row = 6
+    headers = ["No", "Task Date", "Detail", "Notes", "Status", "Created At", "Modified At"]
+    for col, h in enumerate(headers, start=1):
+        c = ws.cell(row=header_row, column=col, value=h)
+        c.font = Font(name="Calibri", size=11, bold=True, color=HEADER_FG)
+        c.fill = PatternFill("solid", fgColor=HEADER_BG)
+        c.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        c.border = border
+
+    def fmt_dt(val):
+        if not val:
+            return ""
+        return str(val).replace("T", " ")[:19]
+
+    r = header_row + 1
+    for i, t in enumerate(tasks, start=1):
+        row_vals = [
+            i,
+            t.get("task_date", ""),
+            t.get("detail", ""),
+            t.get("notes", "") or "",
+            t.get("status", ""),
+            fmt_dt(t.get("created_at")),
+            fmt_dt(t.get("modified_at")),
+        ]
+        for col, val in enumerate(row_vals, start=1):
+            c = ws.cell(row=r, column=col, value=val)
+            c.font = Font(name="Calibri", size=10, color=TITLE_FG)
+            c.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+            c.border = border
+            if i % 2 == 0:
+                c.fill = PatternFill("solid", fgColor=ZEBRA)
+        # color the status cell
+        st = t.get("status", "")
+        if st in STATUS_FILL:
+            sc = ws.cell(row=r, column=5)
+            sc.fill = PatternFill("solid", fgColor=STATUS_FILL[st])
+            sc.font = Font(name="Calibri", size=10, bold=True, color=STATUS_FONT[st])
+            sc.alignment = Alignment(horizontal="center", vertical="center")
+        r += 1
+
+    # column widths
+    widths = [5, 14, 46, 50, 13, 20, 20]
+    for col, w in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(col)].width = w
+
+    # freeze header + autofilter over the table
+    ws.freeze_panes = ws.cell(row=header_row + 1, column=1)
+    last_col = get_column_letter(len(headers))
+    ws.auto_filter.ref = f"A{header_row}:{last_col}{max(header_row, r - 1)}"
+
+    # ================= SHEET 2: SUMMARY =================
+    ws2 = wb.create_sheet("Summary")
+    ws2["A1"] = "Summary"
+    ws2["A1"].font = Font(name="Calibri", size=15, bold=True, color=TITLE_FG)
+    ws2["A2"] = f"Period: {date_from} to {date_to}"
+    ws2["A2"].font = Font(name="Calibri", size=10, color="6B4423")
+
+    by_status = {s: 0 for s in STATUS_ORDER}
+    for t in tasks:
+        by_status[t.get("status")] = by_status.get(t.get("status"), 0) + 1
+    total = len(tasks)
+    completion = round((by_status["Completed"] / total) * 100) if total else 0
+
+    sum_header = 4
+    for col, h in enumerate(["Metric", "Value"], start=1):
+        c = ws2.cell(row=sum_header, column=col, value=h)
+        c.font = Font(name="Calibri", size=11, bold=True, color=HEADER_FG)
+        c.fill = PatternFill("solid", fgColor=HEADER_BG)
+        c.border = border
+
+    rows = [
+        ("Total Tasks", total),
+        ("Planned", by_status.get("Planned", 0)),
+        ("Completed", by_status.get("Completed", 0)),
+        ("Cancelled", by_status.get("Cancelled", 0)),
+        ("Completion Rate", f"{completion}%"),
+    ]
+    rr = sum_header + 1
+    for label, val in rows:
+        a = ws2.cell(row=rr, column=1, value=label)
+        b = ws2.cell(row=rr, column=2, value=val)
+        a.font = Font(name="Calibri", size=10, bold=True, color=TITLE_FG)
+        b.font = Font(name="Calibri", size=10, color=TITLE_FG)
+        a.border = border
+        b.border = border
+        rr += 1
+
+    ws2.column_dimensions["A"].width = 22
+    ws2.column_dimensions["B"].width = 16
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+
+@app.route('/api/export-excel', methods=['POST'])
+def export_excel():
+    data = request.get_json() or {}
+    date_from = data.get('date_from')
+    date_to = data.get('date_to')
+    status_filter = data.get('status', '').strip()
+
+    if not date_from or not date_to:
+        return jsonify({'error': 'date_from and date_to are required'}), 400
+    try:
+        df = datetime.strptime(date_from, '%Y-%m-%d').date()
+        dt = datetime.strptime(date_to, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'error': 'invalid date format'}), 400
+
+    q = Task.query.filter(Task.task_date >= df, Task.task_date <= dt)
+    if status_filter and status_filter in STATUS_ORDER:
+        q = q.filter(Task.status == status_filter)
+    q = q.order_by(status_sort_expr(), Task.task_date.asc())
+    tasks = [t.to_dict() for t in q.all()]
+
+    if not tasks:
+        return jsonify({'error': 'No tasks found for the selected range/status.'}), 404
+
+    buf = build_excel(tasks, date_from, date_to, status_filter)
+    filename = f"kara_task_export_{date_from}_to_{date_to}.xlsx"
+    return send_file(
+        buf,
+        as_attachment=True,
+        download_name=filename,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     )
 
 

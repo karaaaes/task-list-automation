@@ -1,4 +1,4 @@
-version: '3.8'
+name: kara
 
 services:
   db:
@@ -10,10 +10,11 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: kara_taskdb
     volumes:
-      - kara_pgdata:/var/lib/postgresql/data
+      - ./pgdata:/var/lib/postgresql/data          # bind mount, terlihat di folder proyek
       - ./database/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+      - ./backups:/backups                          # target pg_dump
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"                       # jangan expose ke LAN
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d kara_taskdb"]
       interval: 5s
@@ -45,6 +46,3 @@ services:
       - "8889:8889"
     depends_on:
       - backend
-
-volumes:
-  kara_pgdata:

@@ -27,6 +27,11 @@ def generate_ppt_page():
     return render_template('generate_ppt.html', active='generate_ppt')
 
 
+@app.route('/tasks/export-excel')
+def export_excel_page():
+    return render_template('export_excel.html', active='export_excel')
+
+
 # ---- Proxy all /api/* calls to backend ----
 @app.route('/api/<path:subpath>', methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
 def proxy(subpath):

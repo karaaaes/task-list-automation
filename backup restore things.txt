@@ -1,0 +1,10 @@
+## Backup database
+./backup.sh
+
+## Restore Database Yang Telah di Backup
+gunzip -c backups/kara_taskdb-XXXX.sql.gz | docker exec -i kara_db psql -U postgres -d kara_taskdb
+
+## Saat storage penuh
+docker system df          # lihat pemakaian
+docker builder prune -a   # cache build, biasanya paling besar
+docker image prune -a

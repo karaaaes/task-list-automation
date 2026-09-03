@@ -1,0 +1,183 @@
+aku mau program ku dibuat diatas backend fastapi python, frontend vue, database postgre. 
+
+postgre ku ada di docker container, ini confignya bisa dipake ulang ga ya ? soalnya kalo bikin mulu nanti volumenya jadi gede sizenya
+name: kara
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: kara_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: kara_taskdb
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data          # bind mount, terlihat di folder proyek
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+      - ./backups:/backups                          # target pg_dump
+    ports:
+      - "127.0.0.1:5432:5432"                       # jangan expose ke LAN
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d kara_taskdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    container_name: kara_backend
+    restart: always
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/kara_taskdb
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      FLASK_ENV: production
+    ports:
+      - "8888:8888"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    container_name: kara_frontend
+    restart: always
+    environment:
+      BACKEND_URL: http://backend:8888
+    ports:
+      - "8889:8889"
+    depends_on:
+      - backend
+
+ini adalah gambaran dari bisnis proses ku. 
+aku ingin ini dilakukan step by step. 
+ada yang menunggu ada juga yang paralel. 
+
+Step 1 : 
+
+Ini dikerjakan untuk roles PMO. fungsinya adalah memilih SBF yang sudah di list by API. dibawah sudah aku berikan dummy datanya. Di step ini, user bisa memilih lebih dari 1 SBF yang customer_code dan customer_namenya sama. jika berbeda dari sistem akan menolak. 
+
+Lalu akan berlanjut untuk menampilkan layout dari SBF yang dipilih tergantung dari seberapa banyaknya sbf yang dipilih (tergabung 1 layout) kamu pikirkan gimana deh layoutnya supaya UI/UX friendly.
+
+Container SBF Information
+Ini akan menampilkan detail dari SBF yang dipilih. kalau pilih lebih dari 1 SBF, maka po_customer_amount akan di sum semua. 
+
+Container Customer (from ERM)
+1. Terus tampilkan customer code nya apa, customer namenya siapa. 
+2. lalu ada customer division yang bisa dipilih drop down (IT, IT Infra, IT Business). 
+3. Customer Risk Profile : 
+- Supportive
+- Standard
+- Demanding
+- Challenging
+
+Container Project Details
+1. Project Profile (Radio Button) : New / Best Practice
+2. Project Risk : Low, Medium, High
+3. Project Strategic : Low, Medium, High
+4. Project Type to be Created : Implementation, Maintenance, Managed Service
+
+Untuk Project Type, hanya boleh muncul sesuai dengan data yang disajikan di service_type data SBF nya
+
+Kemudian ada tombol Cancel, Save, Next.. Atau kamu atur aja harusnya gimana tombolnya aku juga bingung soalnya.
+
+
+Step 2 : 
+Ini dikerjakan kembali oleh PMO hanya setelah melakukan step 1 ! aku tidak tau baiknya seperti apa, apakah step 1 harus disimpan dulu atau bersifat temporary. kamu yang memutuskan baiknya dan perfect nya seperti apa. Disini tugas PMO adalah melakukan assign project manager, project director dan project admin. ini dropdown, kamu buatin dulu aja dummy nya. 
+
+Kemudian ada tombol Cancel, Save, Next.. Atau kamu atur aja harusnya gimana tombolnya aku juga bingung soalnya.
+
+Step 3 : 
+Ini dikerjakan oleh Resource Manager hanya setelah melakukan step 2 ! PM yang di assign akan bisa membuka view ini. Disini PM bisa melihat detail SBF yang dipilih, Customernya siapa dan Valuenya siapa. Profiling yang di pilih oleh PMO di step 1 dan 2 tampil semua informasinya. 
+
+Tugas PM disini hanya menunjuk siapa resource manager yang dia tunjuk untuk roles yang sudah di pilihin oleh PM. contoh,  di step 2 PMO butuh project manager, project director dan project admin.. maka ketiga ini ya harus dipilih masing2 dropdown untuk pilih resource managernya. 
+
+Kemudian ada tombol Cancel, Save, Next.. Atau kamu atur aja harusnya gimana tombolnya aku juga bingung soalnya.
+
+Step 4, Step 5 dan Step 6 ini bisa dikerjakan secara Paralel oleh Resource Manager yang sudah dipilih oleh PM di step 3 (ini adalah step 4) dan PM bisa sambil mengerjakan select task (ini adalah step 5) serta schedule project yang tasknya sudah di select di step 5 (ini adalah step 6) 
+
+atau step 6 bisa dicampur dengan step 5...
+
+nah di step 5 atau 6 atau campuran ini kan service_type nya ada Implementation,Maintenance,Managed_Service
+
+untuk Implementation gausah pilih date di task yang dipilihnya
+untuk Maintenance,Managed_Service pilih date start date dan end date di task yang dipilih
+
+Setelah itu tampilkan semua summary nya dalam 1 page. Setelah itu ada submit dan kamu tampilkan apa yang sudah di submit beserta statusnya.
+
+ini contoh data SBF nya . Kamu boleh bikin dummy data sekitar 10 ya: 
+
+{
+
+    "data": [
+
+        {
+
+            "uuid": "2f2e6f60-a00f-4481-acca-915f6d95f605",
+
+            "sbf_number": "2026/08/SBF/0001/Rev_1",
+
+            "order_number": "ORD-23019-K3J0Z0",
+
+            "project_code": "TA002220E0007",
+
+            "so_number": "2021/SO/0168",
+
+            "project_name": "Project_Name_Testing",
+	    "customer_code": "CM0034",
+            "customer_name": "Mastersystem Infotama Tbk",
+            "po_customer_currency": "IDR",
+    	    "po_customer_amount": 250000000.0,
+
+            "sales_name": "User Sales",
+
+            "service_budget_type": "Normal",
+
+            "service_type": "Implementation,Maintenance,Managed_Service,Extended_Warranty",
+
+            "status_sbf": "Draft",
+
+            "version": 2,
+
+            "pre_sales_account": "user.user@mastersystem.co.id",
+
+            "sbf_status_notes": null,
+
+            "extended": false,
+
+            "created_date": "2026-08-20T16:17:03.760184"
+
+        }
+
+    ],
+
+    "meta": {
+
+        "total": 1,
+
+        "page": 1,
+
+        "limit": 1,
+
+        "total_pages": 1
+
+    },
+
+    "status_summary": {
+
+        "Draft": 1,
+
+        "Submitted": 0,
+
+        "Approved": 0,
+
+        "Rejected": 0,
+
+        "Revision": 0,
+
+        "Total": 1
+
+    }
+
+}
